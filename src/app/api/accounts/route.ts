@@ -3,7 +3,10 @@ import { db } from "@/db";
 import { accounts } from "@/db/schema";
 
 export async function GET() {
-  return NextResponse.json(await db.select().from(accounts));
+  const data = await db.select().from(accounts);
+  return NextResponse.json(data, {
+    headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=30" },
+  });
 }
 
 export async function POST(req: NextRequest) {

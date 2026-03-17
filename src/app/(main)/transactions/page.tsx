@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isToday, parseISO } from "date-fns";
+import dayjs from "dayjs";
 import { api } from "@/lib/api-client";
 import { formatRupiah, formatDate } from "@/lib/utils";
 import { useRefreshListener } from "@/lib/events";
@@ -29,15 +29,15 @@ function groupByDate(items: TransactionWithRelations[]) {
 }
 
 function buildCalendarDays(year: number, month: number): Date[] {
-  const first = startOfMonth(new Date(year, month));
-  const last = endOfMonth(first);
-  const start = startOfWeek(first, { weekStartsOn: 0 });
-  const end = endOfWeek(last, { weekStartsOn: 0 });
+  const first = dayjs(new Date(year, month)).startOf("month");
+  const last = first.endOf("month");
+  const start = first.startOf("week");
+  const end = last.endOf("week");
   const days: Date[] = [];
   let cur = start;
-  while (cur <= end) {
-    days.push(cur);
-    cur = addDays(cur, 1);
+  while (cur.isBefore(end) || cur.isSame(end, "day")) {
+    days.push(cur.toDate());
+    cur = cur.add(1, "day");
   }
   return days;
 }
@@ -51,13 +51,13 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<TransactionWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const from = format(startOfMonth(new Date(calYear, calMonth)), "yyyy-MM-dd");
-  const to = format(endOfMonth(new Date(calYear, calMonth)), "yyyy-MM-dd");
+  const from = dayjs(new Date(calYear, calMonth)).startOf("month").format("YYYY-MM-DD");
+  const to = dayjs(new Date(calYear, calMonth)).endOf("month").format("YYYY-MM-DD");
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string | number> = { limit: 500, from, to };
+      const params: Record<string, string | number> = { limit: 100, from, to };
       if (filter !== "all") params.type = filter;
       setTransactions(await api.transactions.list(params));
     } catch (err) {
@@ -107,15 +107,15 @@ export default function TransactionsPage() {
   const curMonthDate = new Date(calYear, calMonth);
 
   function prevMonth() {
-    const d = subMonths(curMonthDate, 1);
-    setCalYear(d.getFullYear());
-    setCalMonth(d.getMonth());
+    const d = dayjs(curMonthDate).subtract(1, "month");
+    setCalYear(d.year());
+    setCalMonth(d.month());
   }
   function nextMonth() {
-    const d = addMonths(curMonthDate, 1);
-    if (d > now) return;
-    setCalYear(d.getFullYear());
-    setCalMonth(d.getMonth());
+    const d = dayjs(curMonthDate).add(1, "month");
+    if (d.toDate() > now) return;
+    setCalYear(d.year());
+    setCalMonth(d.month());
   }
 
   const monthTotals = useMemo(() => {
@@ -161,11 +161,11 @@ export default function TransactionsPage() {
               </svg>
             </button>
             <p className="text-sm font-bold text-gray-900">
-              {format(curMonthDate, "MMMM yyyy")}
+              {dayjs(curMonthDate).format("MMMM YYYY")}
             </p>
             <button
               onClick={nextMonth}
-              disabled={addMonths(curMonthDate, 1) > now}
+              disabled={dayjs(curMonthDate).add(1, "month").toDate() > now}
               className="w-8 h-8 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -186,12 +186,13 @@ export default function TransactionsPage() {
           {/* Date cells */}
           <div className="grid grid-cols-7 gap-y-1">
             {calDays.map((day, i) => {
-              const dateStr = format(day, "yyyy-MM-dd");
-              const inMonth = isSameMonth(day, curMonthDate);
+              const dj = dayjs(day);
+              const dateStr = dj.format("YYYY-MM-DD");
+              const inMonth = dj.month() === calMonth && dj.year() === calYear;
               const isSelected = selectedDate === dateStr;
               const hasTx = txDates.has(dateStr);
               const summary = dateSummary[dateStr];
-              const today = isToday(day);
+              const today = dj.isSame(dayjs(), "day");
 
               return (
                 <button
@@ -219,7 +220,7 @@ export default function TransactionsPage() {
                           ? "text-gray-800"
                           : "text-gray-200"
                   }`}>
-                    {format(day, "d")}
+                    {dj.date()}
                   </span>
 
                   {/* Transaction dots */}

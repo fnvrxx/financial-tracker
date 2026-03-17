@@ -2,35 +2,39 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { transactions, categories } from "@/db/schema";
 import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths, subWeeks, parseISO } from "date-fns";
+import dayjs from "dayjs";
 
-async function getAmountSum(type: "income" | "expense", from: string, to: string) {
+async function getAmountSums(from: string, to: string): Promise<{ income: number; expense: number }> {
   const [result] = await db
-    .select({ total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)` })
+    .select({
+      income: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${transactions.amount} ELSE 0 END), 0)`,
+      expense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' THEN ${transactions.amount} ELSE 0 END), 0)`,
+    })
     .from(transactions)
-    .where(and(eq(transactions.type, type), gte(transactions.date, from), lte(transactions.date, to)));
-  return result?.total || 0;
+    .where(and(gte(transactions.date, from), lte(transactions.date, to)));
+  return { income: Number(result?.income || 0), expense: Number(result?.expense || 0) };
 }
 
 export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
   const type = sp.get("type") || "summary";
-  const from = sp.get("from") || format(startOfMonth(new Date()), "yyyy-MM-dd");
-  const to = sp.get("to") || format(endOfMonth(new Date()), "yyyy-MM-dd");
+  const from = sp.get("from") || dayjs().startOf("month").format("YYYY-MM-DD");
+  const to = sp.get("to") || dayjs().endOf("month").format("YYYY-MM-DD");
 
   if (type === "summary") {
-    const income = await getAmountSum("income", from, to);
-    const expense = await getAmountSum("expense", from, to);
-    const [cnt] = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(transactions)
-      .where(and(gte(transactions.date, from), lte(transactions.date, to)));
+    const [sums, cnt] = await Promise.all([
+      getAmountSums(from, to),
+      db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(transactions)
+        .where(and(gte(transactions.date, from), lte(transactions.date, to))),
+    ]);
 
     return NextResponse.json({
-      income,
-      expense,
-      net: income - expense,
-      transactionCount: cnt?.count || 0,
+      income: sums.income,
+      expense: sums.expense,
+      net: sums.income - sums.expense,
+      transactionCount: cnt[0]?.count || 0,
       period: { from, to },
     });
   }
@@ -58,33 +62,37 @@ export async function GET(req: NextRequest) {
   if (type === "trend") {
     const toParam = sp.get("to");
     const period = sp.get("period") || "monthly";
-    const refDate = toParam ? parseISO(toParam) : new Date();
-    const points = [];
+    const refDate = toParam ? dayjs(toParam) : dayjs();
 
     if (period === "weekly") {
-      // Last 3 weeks ending at the week that contains refDate
-      const refWeekEnd = endOfWeek(refDate, { weekStartsOn: 1 });
-      for (let i = 2; i >= 0; i--) {
-        const weekEnd = subWeeks(refWeekEnd, i);
-        const weekStart = startOfWeek(weekEnd, { weekStartsOn: 1 });
-        const f = format(weekStart, "yyyy-MM-dd");
-        const t = format(endOfWeek(weekEnd, { weekStartsOn: 1 }), "yyyy-MM-dd");
-        const income = await getAmountSum("income", f, t);
-        const expense = await getAmountSum("expense", f, t);
-        points.push({ month: format(weekStart, "dd MMM"), income, expense, net: income - expense });
-      }
-    } else {
-      for (let i = 5; i >= 0; i--) {
-        const d = subMonths(refDate, i);
-        const f = format(startOfMonth(d), "yyyy-MM-dd");
-        const t = format(endOfMonth(d), "yyyy-MM-dd");
-        const income = await getAmountSum("income", f, t);
-        const expense = await getAmountSum("expense", f, t);
-        points.push({ month: format(d, "MMM yyyy"), income, expense, net: income - expense });
-      }
-    }
+      const refWeekEnd = refDate.endOf("week");
+      const ranges = Array.from({ length: 3 }, (_, i) => {
+        const weekEnd = refWeekEnd.subtract(2 - i, "week");
+        const weekStart = weekEnd.startOf("week");
+        return { f: weekStart.format("YYYY-MM-DD"), t: weekEnd.format("YYYY-MM-DD"), label: weekStart.format("DD MMM") };
+      });
 
-    return NextResponse.json(points);
+      const points = await Promise.all(
+        ranges.map(async ({ f, t, label }) => {
+          const sums = await getAmountSums(f, t);
+          return { month: label, ...sums, net: sums.income - sums.expense };
+        })
+      );
+      return NextResponse.json(points);
+    } else {
+      const ranges = Array.from({ length: 6 }, (_, i) => {
+        const d = refDate.subtract(5 - i, "month");
+        return { f: d.startOf("month").format("YYYY-MM-DD"), t: d.endOf("month").format("YYYY-MM-DD"), label: d.format("MMM YYYY") };
+      });
+
+      const points = await Promise.all(
+        ranges.map(async ({ f, t, label }) => {
+          const sums = await getAmountSums(f, t);
+          return { month: label, ...sums, net: sums.income - sums.expense };
+        })
+      );
+      return NextResponse.json(points);
+    }
   }
 
   return NextResponse.json({ error: "Unknown type" }, { status: 400 });

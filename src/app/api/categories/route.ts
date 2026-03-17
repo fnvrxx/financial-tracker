@@ -10,7 +10,9 @@ export async function GET(req: NextRequest) {
     ? await db.select().from(categories).where(eq(categories.type, type as "income" | "expense"))
     : await db.select().from(categories);
 
-  return NextResponse.json(data);
+  return NextResponse.json(data, {
+    headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=30" },
+  });
 }
 
 export async function POST(req: NextRequest) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { format, startOfMonth, setMonth, setYear } from "date-fns";
+import dayjs from "dayjs";
 import { api } from "@/lib/api-client";
 import { formatRupiah } from "@/lib/utils";
 import { useRefreshListener } from "@/lib/events";
@@ -44,14 +44,8 @@ export default function CategoryPage() {
   const isCurrentMonth = selectedMonth === now.getMonth() && selectedYear === now.getFullYear();
   const monthName = MONTH_NAMES[selectedMonth];
 
-  const selectedMonthStart = format(
-    startOfMonth(setMonth(setYear(new Date(), selectedYear), selectedMonth)),
-    "yyyy-MM-dd"
-  );
-  const selectedMonthEnd = format(
-    new Date(selectedYear, selectedMonth + 1, 0),
-    "yyyy-MM-dd"
-  );
+  const selectedMonthStart = dayjs(new Date(selectedYear, selectedMonth)).startOf("month").format("YYYY-MM-DD");
+  const selectedMonthEnd = dayjs(new Date(selectedYear, selectedMonth)).endOf("month").format("YYYY-MM-DD");
 
   async function openDetail(b: BudgetStatus) {
     setDetailBudget(b);
@@ -76,8 +70,8 @@ export default function CategoryPage() {
   const refresh = useCallback(async () => {
     try {
       const monthParam = isCurrentMonth ? undefined : selectedMonthStart;
-      const from = format(startOfMonth(setMonth(setYear(new Date(), selectedYear), selectedMonth)), "yyyy-MM-dd");
-      const to = format(new Date(selectedYear, selectedMonth + 1, 0), "yyyy-MM-dd");
+      const from = selectedMonthStart;
+      const to = selectedMonthEnd;
       const [b, c, t, allCats] = await Promise.all([
         api.budgets.list(monthParam ?? selectedMonthStart),
         api.reports.byCategory(from, to),
