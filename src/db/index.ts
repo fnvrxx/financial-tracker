@@ -2,7 +2,9 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-const connectionString = process.env.DATABASE_URL || "postgresql://fnvrxx:123123@localhost:5432/fintrack";
+const connectionString =
+  process.env.DATABASE_URL ||
+  "postgresql://localhost:localhost@localhost:5432/fintrack";
 
 const client = postgres(connectionString);
 export const db = drizzle(client, { schema });
