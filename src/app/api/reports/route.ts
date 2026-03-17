@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { transactions, categories } from "@/db/schema";
 import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
-import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, subMonths, subWeeks, parseISO } from "date-fns";
 
 async function getAmountSum(type: "income" | "expense", from: string, to: string) {
   const [result] = await db
@@ -56,21 +56,35 @@ export async function GET(req: NextRequest) {
   }
 
   if (type === "trend") {
-    const months = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = subMonths(new Date(), i);
-      const f = format(startOfMonth(d), "yyyy-MM-dd");
-      const t = format(endOfMonth(d), "yyyy-MM-dd");
-      const income = await getAmountSum("income", f, t);
-      const expense = await getAmountSum("expense", f, t);
-      months.push({
-        month: format(d, "MMM yyyy"),
-        income,
-        expense,
-        net: income - expense,
-      });
+    const toParam = sp.get("to");
+    const period = sp.get("period") || "monthly";
+    const refDate = toParam ? parseISO(toParam) : new Date();
+    const points = [];
+
+    if (period === "weekly") {
+      // Last 3 weeks ending at the week that contains refDate
+      const refWeekEnd = endOfWeek(refDate, { weekStartsOn: 1 });
+      for (let i = 2; i >= 0; i--) {
+        const weekEnd = subWeeks(refWeekEnd, i);
+        const weekStart = startOfWeek(weekEnd, { weekStartsOn: 1 });
+        const f = format(weekStart, "yyyy-MM-dd");
+        const t = format(endOfWeek(weekEnd, { weekStartsOn: 1 }), "yyyy-MM-dd");
+        const income = await getAmountSum("income", f, t);
+        const expense = await getAmountSum("expense", f, t);
+        points.push({ month: format(weekStart, "dd MMM"), income, expense, net: income - expense });
+      }
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = subMonths(refDate, i);
+        const f = format(startOfMonth(d), "yyyy-MM-dd");
+        const t = format(endOfMonth(d), "yyyy-MM-dd");
+        const income = await getAmountSum("income", f, t);
+        const expense = await getAmountSum("expense", f, t);
+        points.push({ month: format(d, "MMM yyyy"), income, expense, net: income - expense });
+      }
     }
-    return NextResponse.json(months);
+
+    return NextResponse.json(points);
   }
 
   return NextResponse.json({ error: "Unknown type" }, { status: 400 });

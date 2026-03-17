@@ -39,7 +39,7 @@ export const api = {
       ),
   },
   budgets: {
-    list: () => fetcher<any[]>("/budgets"),
+    list: (month?: string) => fetcher<any[]>("/budgets" + (month ? "?month=" + month : "")),
     create: (d: any) => fetcher("/budgets", { method: "POST", body: JSON.stringify(d) }),
     update: (d: any) => fetcher("/budgets", { method: "PUT", body: JSON.stringify(d) }),
   },
@@ -56,7 +56,12 @@ export const api = {
       if (to) sp.set("to", to);
       return fetcher<any[]>("/reports?" + sp);
     },
-    trend: () => fetcher<any[]>("/reports?type=trend"),
+    trend: (to?: string, period?: "monthly" | "weekly") => {
+      const p = new URLSearchParams({ type: "trend" });
+      if (to) p.set("to", to);
+      if (period) p.set("period", period);
+      return fetcher<any[]>("/reports?" + p);
+    },
   },
   sync: {
     status: () => fetcher<any>("/sync"),

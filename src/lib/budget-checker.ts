@@ -1,10 +1,12 @@
 import { db } from "@/db";
 import { budgets, transactions, categories } from "@/db/schema";
-import { eq, and, sql, gte } from "drizzle-orm";
-import { startOfMonth, startOfWeek, format } from "date-fns";
+import { eq, and, sql, gte, lte } from "drizzle-orm";
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, format, parseISO } from "date-fns";
 import type { BudgetStatus } from "@/types";
 
-export async function checkBudgets(): Promise<BudgetStatus[]> {
+export async function checkBudgets(monthStart?: string): Promise<BudgetStatus[]> {
+  const refDate = monthStart ? parseISO(monthStart) : new Date();
+
   const all = await db
     .select({ budget: budgets, category: categories })
     .from(budgets)
@@ -15,8 +17,12 @@ export async function checkBudgets(): Promise<BudgetStatus[]> {
   for (const { budget, category } of all) {
     const periodStart =
       budget.period === "monthly"
-        ? format(startOfMonth(new Date()), "yyyy-MM-dd")
-        : format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
+        ? format(startOfMonth(refDate), "yyyy-MM-dd")
+        : format(startOfWeek(refDate, { weekStartsOn: 1 }), "yyyy-MM-dd");
+    const periodEnd =
+      budget.period === "monthly"
+        ? format(endOfMonth(refDate), "yyyy-MM-dd")
+        : format(endOfWeek(refDate, { weekStartsOn: 1 }), "yyyy-MM-dd");
 
     const [result] = await db
       .select({ total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)` })
@@ -25,7 +31,8 @@ export async function checkBudgets(): Promise<BudgetStatus[]> {
         and(
           eq(transactions.categoryId, budget.categoryId),
           eq(transactions.type, "expense"),
-          gte(transactions.date, periodStart)
+          gte(transactions.date, periodStart),
+          lte(transactions.date, periodEnd)
         )
       );
 

@@ -53,11 +53,6 @@ export default function HomePage() {
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <path d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </div>
               <div>
                 <p className="text-white/60 text-xs font-medium">Today</p>
                 <p className="text-sm font-bold">
@@ -65,23 +60,6 @@ export default function HomePage() {
                 </p>
               </div>
             </div>
-          </div>
-
-          {/* Expense / Income toggle */}
-          <div className="flex gap-1 bg-white/15 backdrop-blur rounded-2xl p-1 mb-6 max-w-sm">
-            {(["expense", "income"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${
-                  tab === t
-                    ? "bg-white text-primary-600 shadow-lg"
-                    : "text-white/80"
-                }`}
-              >
-                {t === "expense" ? "Pengeluaran" : "Pemasukan"}
-              </button>
-            ))}
           </div>
 
           {/* Savings card */}
@@ -96,7 +74,7 @@ export default function HomePage() {
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span className="text-white/60 text-[11px] font-medium">Earned</span>
+                  <span className="text-white/60 text-[11px] font-medium">Pemasukkan</span>
                 </div>
                 <p className="text-base md:text-lg font-bold">
                   {formatRupiah(summary?.income || 0)}
@@ -105,7 +83,7 @@ export default function HomePage() {
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="w-2 h-2 rounded-full bg-red-400" />
-                  <span className="text-white/60 text-[11px] font-medium">Spent</span>
+                  <span className="text-white/60 text-[11px] font-medium">Pengeluaran</span>
                 </div>
                 <p className="text-base md:text-lg font-bold">
                   {formatRupiah(summary?.expense || 0)}

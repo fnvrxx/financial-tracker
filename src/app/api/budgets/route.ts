@@ -4,8 +4,9 @@ import { budgets } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { checkBudgets } from "@/lib/budget-checker";
 
-export async function GET() {
-  return NextResponse.json(await checkBudgets());
+export async function GET(req: NextRequest) {
+  const month = new URL(req.url).searchParams.get("month") ?? undefined;
+  return NextResponse.json(await checkBudgets(month));
 }
 
 export async function POST(req: NextRequest) {

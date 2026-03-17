@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { format, startOfMonth, setMonth, setYear } from "date-fns";
 import { api } from "@/lib/api-client";
 import { formatRupiah } from "@/lib/utils";
 import { useRefreshListener } from "@/lib/events";
@@ -33,15 +34,54 @@ export default function CategoryPage() {
   const [budgetAmount, setBudgetAmount] = useState("");
   const [savingBudget, setSavingBudget] = useState(false);
 
-  const currentMonth = new Date().getMonth();
-  const monthName = MONTH_NAMES[currentMonth];
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [detailBudget, setDetailBudget] = useState<BudgetStatus | null>(null);
+  const [detailTxs, setDetailTxs] = useState<any[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const isCurrentMonth = selectedMonth === now.getMonth() && selectedYear === now.getFullYear();
+  const monthName = MONTH_NAMES[selectedMonth];
+
+  const selectedMonthStart = format(
+    startOfMonth(setMonth(setYear(new Date(), selectedYear), selectedMonth)),
+    "yyyy-MM-dd"
+  );
+  const selectedMonthEnd = format(
+    new Date(selectedYear, selectedMonth + 1, 0),
+    "yyyy-MM-dd"
+  );
+
+  async function openDetail(b: BudgetStatus) {
+    setDetailBudget(b);
+    setDetailTxs([]);
+    setDetailLoading(true);
+    try {
+      const txs = await api.transactions.list({
+        categoryId: b.categoryId,
+        from: selectedMonthStart,
+        to: selectedMonthEnd,
+        limit: 100,
+      });
+      txs.sort((a: any, b: any) => a.transaction.date.localeCompare(b.transaction.date));
+      setDetailTxs(txs);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
 
   const refresh = useCallback(async () => {
     try {
+      const monthParam = isCurrentMonth ? undefined : selectedMonthStart;
+      const from = format(startOfMonth(setMonth(setYear(new Date(), selectedYear), selectedMonth)), "yyyy-MM-dd");
+      const to = format(new Date(selectedYear, selectedMonth + 1, 0), "yyyy-MM-dd");
       const [b, c, t, allCats] = await Promise.all([
-        api.budgets.list(),
-        api.reports.byCategory(),
-        api.reports.trend(),
+        api.budgets.list(monthParam ?? selectedMonthStart),
+        api.reports.byCategory(from, to),
+        api.reports.trend(selectedMonthEnd, "weekly"),
         api.categories.list(),
       ]);
       setBudgets(b);
@@ -54,7 +94,8 @@ export default function CategoryPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMonth, selectedYear]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useRefreshListener(refresh);
@@ -95,30 +136,75 @@ export default function CategoryPage() {
 
           {/* Month picker */}
           {showMonthPicker && (
-            <div className="grid grid-cols-4 gap-2 mb-4 animate-fade-in">
-              {MONTH_NAMES.map((name, i) => (
+            <div className="mb-4 animate-fade-in">
+              {/* Year navigation */}
+              <div className="flex items-center justify-between mb-3">
                 <button
-                  key={i}
-                  className={`px-2 py-2 rounded-xl text-[11px] font-bold transition-all ${
-                    i === currentMonth
-                      ? "bg-white text-primary-600 shadow-lg"
-                      : i <= currentMonth
-                        ? "bg-white/15 text-white/70 hover:text-white"
-                        : "bg-white/5 text-white/30 cursor-not-allowed"
-                  }`}
-                  disabled={i > currentMonth}
+                  onClick={() => setSelectedYear((y) => y - 1)}
+                  className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-colors"
                 >
-                  {name.slice(0, 3)}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M15 18l-6-6 6-6" />
+                  </svg>
                 </button>
-              ))}
+                <span className="text-sm font-bold">{selectedYear}</span>
+                <button
+                  onClick={() => setSelectedYear((y) => y + 1)}
+                  disabled={selectedYear >= now.getFullYear()}
+                  className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </button>
+              </div>
+              {/* Month grid */}
+              <div className="grid grid-cols-4 gap-2">
+                {MONTH_NAMES.map((name, i) => {
+                  const isFuture = selectedYear === now.getFullYear() && i > now.getMonth();
+                  const isSelected = i === selectedMonth && selectedYear === selectedYear;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        if (!isFuture) {
+                          setSelectedMonth(i);
+                          setShowMonthPicker(false);
+                        }
+                      }}
+                      className={`px-2 py-2 rounded-xl text-[11px] font-bold transition-all ${
+                        isSelected
+                          ? "bg-white text-primary-600 shadow-lg"
+                          : isFuture
+                            ? "bg-white/5 text-white/30 cursor-not-allowed"
+                            : "bg-white/15 text-white/70 hover:bg-white/25 hover:text-white"
+                      }`}
+                      disabled={isFuture}
+                    >
+                      {name.slice(0, 3)}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
           <div className="text-center mb-4">
+            Estimasi Sisa
             <p className="text-4xl font-bold font-display tracking-tight">
               {formatRupiah(totalBudget - totalSpent)}
             </p>
-            <p className="text-white/60 text-sm mt-1">{monthName}</p>
+            <p className="text-white/60 text-sm mt-1">
+              {monthName} {selectedYear}
+              {!isCurrentMonth && (
+                <button
+                  onClick={() => { setSelectedMonth(now.getMonth()); setSelectedYear(now.getFullYear()); }}
+                  className="ml-2 text-[10px] bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded-full transition-colors"
+                >
+                  Kembali ke bulan ini
+                </button>
+              )}
+            </p>
           </div>
 
           {/* Sparkline chart */}
@@ -170,7 +256,8 @@ export default function CategoryPage() {
           budgets.map((b, i) => (
             <div
               key={b.budgetId}
-              className={`bg-white rounded-2xl p-4 shadow-card animate-fade-in stagger-${Math.min(i + 1, 4)}`}
+              onClick={() => openDetail(b)}
+              className={`bg-white rounded-2xl p-4 shadow-card animate-fade-in stagger-${Math.min(i + 1, 4)} cursor-pointer hover:shadow-md transition-shadow`}
             >
               <div className="flex items-center gap-3 mb-3">
                 <div
@@ -363,6 +450,116 @@ export default function CategoryPage() {
                 {savingBudget ? "Menyimpan..." : "Set Budget"}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Category detail sheet */}
+      {detailBudget && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
+          onClick={(e) => { if (e.target === e.currentTarget) setDetailBudget(null); }}
+        >
+          <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl pb-10 sm:pb-0 animate-slide-up sm:mx-4 max-h-[88vh] flex flex-col">
+            {/* Drag handle */}
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-4 mb-1 sm:hidden shrink-0" />
+
+            {/* Header */}
+            <div className="px-6 pt-4 pb-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-base font-bold shrink-0"
+                  style={{
+                    background: `${detailBudget.categoryColor || "#7c4dff"}15`,
+                    color: detailBudget.categoryColor || "#7c4dff",
+                  }}
+                >
+                  {detailBudget.categoryName.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-bold text-gray-900 font-display">{detailBudget.categoryName}</h2>
+                  <p className="text-[11px] text-gray-400">
+                    {monthName} {selectedYear} · {formatRupiah(detailBudget.spent)} / {formatRupiah(detailBudget.limitAmount)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDetailBudget(null)}
+                  className="w-8 h-8 flex items-center justify-center rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors shrink-0"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Budget progress bar */}
+              <div className="mt-3">
+                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${
+                      detailBudget.isOverBudget ? "bg-red-500" : detailBudget.percentage > 60 ? "bg-amber-500" : "bg-primary-500"
+                    }`}
+                    style={{ width: `${Math.min(detailBudget.percentage, 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className={`text-[11px] font-bold ${detailBudget.isOverBudget ? "text-red-500" : "text-primary-600"}`}>
+                    {detailBudget.percentage}% terpakai
+                  </span>
+                  <span className="text-[11px] text-gray-400">
+                    Sisa {formatRupiah(Math.max(detailBudget.remaining, 0))}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 shrink-0" />
+
+            {/* Transaction list */}
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              {detailLoading ? (
+                <div className="py-10 flex justify-center">
+                  <div className="w-6 h-6 border-2 border-primary-300 border-t-primary-600 rounded-full animate-spin" />
+                </div>
+              ) : detailTxs.length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="text-sm text-gray-400">Belum ada transaksi bulan ini</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {detailTxs.map((item: any) => (
+                    <div key={item.transaction.id} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {item.transaction.note || detailBudget.categoryName}
+                        </p>
+                        <p className="text-[11px] text-gray-400">
+                          {item.transaction.date} · {item.account.name}
+                        </p>
+                      </div>
+                      <span className={`text-sm font-bold shrink-0 ${
+                        item.transaction.type === "expense" ? "text-red-500" : "text-emerald-500"
+                      }`}>
+                        {item.transaction.type === "expense" ? "-" : "+"}
+                        {formatRupiah(item.transaction.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer summary */}
+            {!detailLoading && detailTxs.length > 0 && (
+              <div className="px-6 py-3 border-t border-gray-100 shrink-0">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-400">{detailTxs.length} transaksi</span>
+                  <span className="text-sm font-bold text-gray-700">
+                    Total {formatRupiah(detailTxs.reduce((s: number, t: any) => s + t.transaction.amount, 0))}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -2,6 +2,11 @@
 
 Personal finance tracker dengan purple gradient UI, PostgreSQL database, dan Google Sheets sync.
 
+Perlu diperbaiki:
+- [ ] Masih perlu dioptimasi, karena setiap reload butuh waktu lama
+- [ ] Desain perlu di upgrade lagi agar lebih menarik dan simple
+- [ ] icon diubah bikin sendiri (jangan import! terlalu berat)
+- [ ] 
 ## Tech Stack
 
 - **Framework**: Next.js 14 (App Router + PWA)
