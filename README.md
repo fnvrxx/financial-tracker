@@ -36,13 +36,10 @@ createdb fintrack
 cp .env.example .env
 # Edit DATABASE_URL, GOOGLE_*, TELEGRAM_* sesuai kebutuhan
 
-# 4. Push schema ke database
-npm run db:push
-
-# 5. (Opsional) Seed data contoh
+# 4. Jalankan Seed data (contoh)
 bash seed_database.sh
 
-# 6. Jalankan dev server
+# 5. Jalankan dev server
 npm run dev
 ```
 
