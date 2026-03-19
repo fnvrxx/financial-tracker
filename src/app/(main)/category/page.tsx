@@ -7,6 +7,7 @@ import { formatRupiah } from "@/lib/utils";
 import { useRefreshListener } from "@/lib/events";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import CreateBudgetForm from "@/components/CreateBudgetForm";
+import CategoryDetailSheet from "@/components/CategoryDetailSheet";
 import type { BudgetStatus, CategoryBreakdown, MonthlyTrend } from "@/types";
 
 const MONTH_NAMES = [
@@ -450,112 +451,19 @@ export default function CategoryPage() {
 
       {/* Category detail sheet */}
       {detailBudget && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
-          onClick={(e) => { if (e.target === e.currentTarget) setDetailBudget(null); }}
-        >
-          <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl pb-10 sm:pb-0 animate-slide-up sm:mx-4 max-h-[88vh] flex flex-col">
-            {/* Drag handle */}
-            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-4 mb-1 sm:hidden shrink-0" />
-
-            {/* Header */}
-            <div className="px-6 pt-4 pb-4 shrink-0">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-base font-bold shrink-0"
-                  style={{
-                    background: `${detailBudget.categoryColor || "#7c4dff"}15`,
-                    color: detailBudget.categoryColor || "#7c4dff",
-                  }}
-                >
-                  {detailBudget.categoryName.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-base font-bold text-gray-900 font-display">{detailBudget.categoryName}</h2>
-                  <p className="text-[11px] text-gray-400">
-                    {monthName} {selectedYear} · {formatRupiah(detailBudget.spent)} / {formatRupiah(detailBudget.limitAmount)}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setDetailBudget(null)}
-                  className="w-8 h-8 flex items-center justify-center rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors shrink-0"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* Budget progress bar */}
-              <div className="mt-3">
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ${
-                      detailBudget.isOverBudget ? "bg-red-500" : detailBudget.percentage > 60 ? "bg-amber-500" : "bg-primary-500"
-                    }`}
-                    style={{ width: `${Math.min(detailBudget.percentage, 100)}%` }}
-                  />
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span className={`text-[11px] font-bold ${detailBudget.isOverBudget ? "text-red-500" : "text-primary-600"}`}>
-                    {detailBudget.percentage}% terpakai
-                  </span>
-                  <span className="text-[11px] text-gray-400">
-                    Sisa {formatRupiah(Math.max(detailBudget.remaining, 0))}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100 shrink-0" />
-
-            {/* Transaction list */}
-            <div className="overflow-y-auto flex-1 px-6 py-4">
-              {detailLoading ? (
-                <div className="py-10 flex justify-center">
-                  <div className="w-6 h-6 border-2 border-primary-300 border-t-primary-600 rounded-full animate-spin" />
-                </div>
-              ) : detailTxs.length === 0 ? (
-                <div className="py-10 text-center">
-                  <p className="text-sm text-gray-400">Belum ada transaksi bulan ini</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {detailTxs.map((item: any) => (
-                    <div key={item.transaction.id} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {item.transaction.note || detailBudget.categoryName}
-                        </p>
-                        <p className="text-[11px] text-gray-400">
-                          {item.transaction.date} · {item.account.name}
-                        </p>
-                      </div>
-                      <span className={`text-sm font-bold shrink-0 ${
-                        item.transaction.type === "expense" ? "text-red-500" : "text-emerald-500"
-                      }`}>
-                        {item.transaction.type === "expense" ? "-" : "+"}
-                        {formatRupiah(item.transaction.amount)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Footer summary */}
-            {!detailLoading && detailTxs.length > 0 && (
-              <div className="px-6 py-3 border-t border-gray-100 shrink-0">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-400">{detailTxs.length} transaksi</span>
-                  <span className="text-sm font-bold text-gray-700">
-                    Total {formatRupiah(detailTxs.reduce((s: number, t: any) => s + t.transaction.amount, 0))}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <CategoryDetailSheet
+          name={detailBudget.categoryName}
+          color={detailBudget.categoryColor || "#7c4dff"}
+          subtitle={`${monthName} ${selectedYear} · ${formatRupiah(detailBudget.spent)} / ${formatRupiah(detailBudget.limitAmount)}`}
+          transactions={detailTxs}
+          loading={detailLoading}
+          onClose={() => setDetailBudget(null)}
+          budget={{
+            percentage: detailBudget.percentage,
+            isOverBudget: detailBudget.isOverBudget,
+            remaining: detailBudget.remaining,
+          }}
+        />
       )}
 
       <CreateBudgetForm onSuccess={refresh} />

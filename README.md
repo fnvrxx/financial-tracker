@@ -51,8 +51,7 @@ Buka http://localhost:3000
 
 | Route           | Deskripsi                                                                                  |
 | --------------- | ------------------------------------------------------------------------------------------ |
-| `/`             | Home — savings card, top spending, monthly budget progress                                 |
-| `/graph`        | Reports — donut chart per bulan, category breakdown                                        |
+| `/`             | Home — savings card, top spending, monthly budget progress                                 |                     |
 | `/transactions` | Daftar transaksi + kalender interaktif                                                     |
 | `/category`     | Budget tracking — sparkline 3 minggu, progress per kategori, detail transaksi per kategori |
 
@@ -84,13 +83,12 @@ Buka http://localhost:3000
 
 - [x] **Performa** — setiap navigasi halaman fetch ulang semua data; perlu SWR/React Query + cache
 - [ ] **Ikon kategori** — saat ini hanya huruf pertama nama; perlu icon library ringan (inline SVG, bukan import package berat)
+- [ ] **Belum Responsive** — masih belum responsive di handphone pada sesi simpan transaksi, riwayat transaksi
 - [ ] **Desain budget card** — tampilan perlu dipoles, terutama state "over budget"
 - [ ] **Hapus transaksi** — saat ini klik langsung hapus tanpa UI konfirmasi yang proper (masih pakai `confirm()` browser)
-- [ ] **Edit budget** — limit budget bisa diupdate via API tapi belum ada UI-nya di halaman category
-- [ ] **Validasi form** — `CreateBudgetForm` dan `TransactionForm` belum ada validasi client-side yang ketat
-- [ ] **Error boundary** — halaman tidak punya fallback UI saat fetch gagal
-- [ ] **Offline support** — PWA manifest sudah ada tapi service worker belum dikonfigurasi
-- [ ] **Tahun di month picker** — category page bisa navigasi tahun, tapi transactions page belum
+- [x] **Validasi form** — `CreateBudgetForm` dan `TransactionForm` belum ada validasi client-side yang ketat
+- [x] **Error boundary** — halaman tidak punya fallback UI saat fetch gagal
+- [x] **Offline support** — service worker + IndexedDB queue + auto-sync saat kembali online
 
 ---
 
@@ -98,13 +96,7 @@ Buka http://localhost:3000
 
 - [ ] **Multi-user / auth** — tambah NextAuth.js atau Clerk untuk login
 - [ ] **Capture kwitansi** - ada scan live camera untuk kwitansi kemudian masuk ke sistem
-- [ ] **Recurring transactions** — transaksi berulang otomatis (langganan, cicilan)
-- [ ] **Export PDF/CSV** — laporan bulanan bisa diunduh langsung dari app
 - [ ] **Push notification** — budget alert via web push, bukan hanya Telegram
-- [ ] **Dark mode** — toggle tema gelap
-- [ ] **Multi-currency** — dukungan mata uang selain IDR
-- [ ] **Savings goals** — target tabungan dengan progress tracking
-- [ ] **Account transfer** — fitur transfer antar akun (bukan hanya income/expense)
 - [ ] **Split bill** — satu transaksi bisa dibagi ke beberapa kategori
 - [ ] **Foto struk** — attach foto nota ke transaksi
 - [ ] **AI categorization** — auto-kategorisasi transaksi berdasarkan catatan

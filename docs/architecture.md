@@ -7,7 +7,7 @@ financial-tracker/
 ├── src/
 │   ├── app/
 │   │   ├── (main)/               # Route group — layout dengan BottomNav + TransactionForm
-│   │   │   ├── layout.tsx        # Global FAB (TransactionForm) + BottomNav
+│   │   │   ├── layout.tsx        # Global FAB (TransactionForm) + BottomNav + OfflineIndicator
 │   │   │   ├── page.tsx          # Home
 │   │   │   ├── graph/page.tsx    # Reports
 │   │   │   ├── transactions/     # Transaksi + kalender
@@ -24,6 +24,7 @@ financial-tracker/
 │   ├── components/
 │   │   ├── BottomNav.tsx         # Tab bar bawah (4 item)
 │   │   ├── BudgetStatusBadge.tsx # Badge "on track" / "exceeded"
+│   │   ├── OfflineIndicator.tsx  # Banner offline + pending sync count
 │   │   ├── CreateBudgetForm.tsx  # Modal buat kategori + budget baru
 │   │   ├── DonutChart.tsx        # SVG donut chart untuk graph page
 │   │   ├── LoadingSpinner.tsx    # Spinner reusable
@@ -37,11 +38,15 @@ financial-tracker/
 │   │   ├── api-client.ts         # Typed fetch wrapper (api.*)
 │   │   ├── budget-checker.ts     # Hitung spent per kategori + alert logic
 │   │   ├── events.ts             # useRefreshListener — custom event bus
+│   │   ├── offline-queue.ts      # IndexedDB queue untuk transaksi offline
+│   │   ├── offline-sync.ts       # Auto-flush queue saat kembali online
 │   │   ├── sheets.ts             # Google Sheets API helper
 │   │   ├── sync.ts               # Sync queue manager
 │   │   └── utils.ts              # formatRupiah, formatDate, cn
 │   └── types/
 │       └── index.ts              # Interface TypeScript (BudgetStatus, dll)
+├── public/
+│   └── sw.js                     # Service Worker (cache + offline)
 ├── docs/                         # Dokumentasi ini
 ├── seed_database.sh              # Script seed 145 transaksi Jan–Mar 2025
 ├── seed_data.sql                 # SQL data contoh

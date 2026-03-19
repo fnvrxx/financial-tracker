@@ -50,6 +50,12 @@ export default function TransactionsPage() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [transactions, setTransactions] = useState<TransactionWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+
+  function showToast(msg: string, type: "success" | "error" = "success") {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2500);
+  }
 
   const from = dayjs(new Date(calYear, calMonth)).startOf("month").format("YYYY-MM-DD");
   const to = dayjs(new Date(calYear, calMonth)).endOf("month").format("YYYY-MM-DD");
@@ -77,8 +83,14 @@ export default function TransactionsPage() {
 
   async function handleDelete(id: number) {
     if (!confirm("Hapus transaksi ini?")) return;
-    await api.transactions.delete(id);
-    refresh();
+    try {
+      await api.transactions.delete(id);
+      showToast("Transaksi berhasil dihapus");
+      refresh();
+    } catch (err) {
+      showToast("Gagal menghapus transaksi", "error");
+      console.error(err);
+    }
   }
 
   // Dates that have at least one transaction
@@ -129,6 +141,23 @@ export default function TransactionsPage() {
 
   return (
     <div className="max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto pb-24">
+
+      {/* Toast notification */}
+      {toast && (
+        <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[60] animate-slide-up">
+          <div className={`flex items-center gap-2 px-5 py-3 rounded-2xl shadow-lg text-white ${
+            toast.type === "success" ? "bg-emerald-500" : "bg-red-500"
+          }`}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              {toast.type === "success"
+                ? <path d="M20 6L9 17l-5-5" />
+                : <path d="M18 6L6 18M6 6l12 12" />}
+            </svg>
+            <span className="text-sm font-semibold">{toast.msg}</span>
+          </div>
+        </div>
+      )}
+
       <PageHeader title="Transaksi">
         <div className="flex gap-2">
           {(Object.keys(FILTER_LABELS) as FilterType[]).map((f) => (

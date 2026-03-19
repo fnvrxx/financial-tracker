@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { api } from "@/lib/api-client";
 
-// TODO: expand dengan full icon library, ganti path SVG dengan komponen lucide-react
 const ICON_OPTIONS = [
   { key: "utensils",     label: "Makan",      path: "M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6h3" },
   { key: "car",          label: "Transport",  path: "M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2h-2m-6 0a2 2 0 1 0 4 0 2 2 0 0 0-4 0m-6 0a2 2 0 1 0 4 0 2 2 0 0 0-4 0" },
@@ -28,6 +27,11 @@ interface FormState {
   monthlyBudget: string;
 }
 
+interface FormErrors {
+  name?: string;
+  monthlyBudget?: string;
+}
+
 const INITIAL_FORM: FormState = {
   name: "",
   icon: "tag",
@@ -36,20 +40,61 @@ const INITIAL_FORM: FormState = {
   monthlyBudget: "",
 };
 
+const MIN_BUDGET = 10_000;
+const MAX_BUDGET = 999_999_999;
+
+function validateForm(form: FormState): FormErrors {
+  const errors: FormErrors = {};
+  const trimmed = form.name.trim();
+
+  if (!trimmed) {
+    errors.name = "Nama kategori wajib diisi";
+  } else if (trimmed.length < 2) {
+    errors.name = "Minimal 2 karakter";
+  } else if (trimmed.length > 30) {
+    errors.name = "Maksimal 30 karakter";
+  } else if (!/^[\w\s\-&().]+$/i.test(trimmed)) {
+    errors.name = "Karakter tidak valid";
+  }
+
+  const amount = Number(form.monthlyBudget);
+  if (!form.monthlyBudget || amount <= 0) {
+    errors.monthlyBudget = "Budget bulanan wajib diisi";
+  } else if (amount < MIN_BUDGET) {
+    errors.monthlyBudget = `Minimal Rp ${MIN_BUDGET.toLocaleString("id-ID")}`;
+  } else if (amount > MAX_BUDGET) {
+    errors.monthlyBudget = `Maksimal Rp ${MAX_BUDGET.toLocaleString("id-ID")}`;
+  }
+
+  return errors;
+}
+
 export default function CreateBudgetForm({ onSuccess }: { onSuccess: () => void }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
+  const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const monthlyNum = Number(form.monthlyBudget);
   const dailyPreview = monthlyNum > 0 ? Math.round(monthlyNum / 30) : 0;
 
+  function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+    setErrors((e) => ({ ...e, [key]: undefined }));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim() || monthlyNum <= 0) return;
+    setSubmitError(null);
+
+    const fieldErrors = validateForm(form);
+    if (Object.keys(fieldErrors).length > 0) {
+      setErrors(fieldErrors);
+      return;
+    }
+
     setLoading(true);
-    setError(null);
     try {
       const newCategory = await api.categories.create({
         name: form.name.trim(),
@@ -59,10 +104,11 @@ export default function CreateBudgetForm({ onSuccess }: { onSuccess: () => void 
       });
       await api.budgets.create({ categoryId: newCategory.id, limitAmount: monthlyNum, period: "monthly" });
       setForm({ ...INITIAL_FORM });
+      setErrors({});
       setOpen(false);
       onSuccess();
     } catch (err) {
-      setError((err as Error).message);
+      setSubmitError((err as Error).message || "Gagal membuat kategori");
     } finally {
       setLoading(false);
     }
@@ -88,11 +134,10 @@ export default function CreateBudgetForm({ onSuccess }: { onSuccess: () => void 
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
         >
           <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 pb-10 sm:pb-6 animate-slide-up sm:mx-4 max-h-[92vh] overflow-y-auto">
-            {/* Drag handle (mobile) */}
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5 sm:hidden" />
 
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-gray-900 font-display">New Budget Category</h2>
+              <h2 className="text-lg font-bold text-gray-900 font-display">Kategori Budget Baru</h2>
               <button
                 onClick={() => setOpen(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
@@ -106,17 +151,52 @@ export default function CreateBudgetForm({ onSuccess }: { onSuccess: () => void 
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Nama kategori */}
               <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">
-                  Nama Kategori
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide">
+                    Nama Kategori
+                  </label>
+                  <span className={`text-[10px] font-medium ${form.name.length > 25 ? "text-amber-500" : "text-gray-300"}`}>
+                    {form.name.length}/30
+                  </span>
+                </div>
                 <input
                   type="text"
                   value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  onChange={(e) => updateField("name", e.target.value)}
                   placeholder="e.g. Makan Siang"
-                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-sm font-medium text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-transparent"
-                  required
+                  maxLength={30}
+                  className={`w-full px-4 py-3 rounded-2xl border text-sm font-medium text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 transition-colors ${
+                    errors.name
+                      ? "border-red-300 focus:ring-red-200"
+                      : "border-gray-200 focus:ring-primary-300 focus:border-transparent"
+                  }`}
                 />
+                {errors.name && <p className="text-xs text-red-500 mt-1.5 ml-1">{errors.name}</p>}
+              </div>
+
+              {/* Tipe */}
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">
+                  Tipe
+                </label>
+                <div className="flex gap-2">
+                  {(["expense", "income"] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => updateField("type", t)}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
+                        form.type === t
+                          ? t === "expense"
+                            ? "border-red-400 bg-red-50 text-red-600"
+                            : "border-emerald-400 bg-emerald-50 text-emerald-600"
+                          : "border-gray-100 text-gray-400"
+                      }`}
+                    >
+                      {t === "expense" ? "Pengeluaran" : "Pemasukan"}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Ikon */}
@@ -187,13 +267,17 @@ export default function CreateBudgetForm({ onSuccess }: { onSuccess: () => void 
                   <input
                     type="number"
                     value={form.monthlyBudget}
-                    onChange={(e) => setForm((f) => ({ ...f, monthlyBudget: e.target.value }))}
+                    onChange={(e) => updateField("monthlyBudget", e.target.value)}
                     placeholder="0"
                     min="1"
-                    className="w-full pl-10 pr-4 py-3 rounded-2xl border border-gray-200 text-sm font-medium text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-transparent"
-                    required
+                    className={`w-full pl-10 pr-4 py-3 rounded-2xl border text-sm font-medium text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 transition-colors ${
+                      errors.monthlyBudget
+                        ? "border-red-300 focus:ring-red-200"
+                        : "border-gray-200 focus:ring-primary-300 focus:border-transparent"
+                    }`}
                   />
                 </div>
+                {errors.monthlyBudget && <p className="text-xs text-red-500 mt-1.5 ml-1">{errors.monthlyBudget}</p>}
               </div>
 
               {/* Preview Target Harian */}
@@ -206,17 +290,17 @@ export default function CreateBudgetForm({ onSuccess }: { onSuccess: () => void 
                 </div>
               )}
 
-              {/* Error inline */}
-              {error && (
+              {/* Submit error */}
+              {submitError && (
                 <div className="bg-red-50 rounded-2xl px-4 py-3">
-                  <p className="text-xs font-medium text-red-600">{error}</p>
+                  <p className="text-xs font-medium text-red-600">{submitError}</p>
                 </div>
               )}
 
               {/* Submit */}
               <button
                 type="submit"
-                disabled={loading || !form.name.trim() || monthlyNum <= 0}
+                disabled={loading}
                 className="w-full py-3.5 rounded-2xl bg-primary-500 text-white text-sm font-bold shadow-button transition-all hover:bg-primary-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Menyimpan..." : "Buat Kategori"}

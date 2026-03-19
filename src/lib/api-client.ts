@@ -1,3 +1,5 @@
+import { queueTransaction } from "./offline-queue";
+
 const BASE = "/api";
 
 // Simple in-memory cache with TTL
@@ -42,6 +44,18 @@ async function cachedFetch<T>(url: string, ttl = TTL): Promise<T> {
   return data;
 }
 
+/**
+ * Preload common API data into cache.
+ * Call this early (e.g. in layout mount) so pages render instantly.
+ */
+export function preloadPages() {
+  api.reports.summary();
+  api.reports.byCategory();
+  api.budgets.list();
+  api.categories.list();
+  api.accounts.list();
+}
+
 export const api = {
   transactions: {
     list(params?: Record<string, any>) {
@@ -50,10 +64,18 @@ export const api = {
       const qs = sp.toString();
       return fetcher<any[]>("/transactions" + (qs ? "?" + qs : ""));
     },
-    create(data: any) {
+    async create(data: any) {
       invalidateCache("/reports");
       invalidateCache("/budgets");
-      return fetcher<any>("/transactions", { method: "POST", body: JSON.stringify(data) });
+      try {
+        return await fetcher<any>("/transactions", { method: "POST", body: JSON.stringify(data) });
+      } catch (err) {
+        if (!navigator.onLine) {
+          await queueTransaction(data);
+          return { id: -Date.now(), ...data, synced: false, _offline: true };
+        }
+        throw err;
+      }
     },
     delete(id: number) {
       invalidateCache("/reports");
