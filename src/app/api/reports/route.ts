@@ -1,98 +1,89 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { transactions, categories } from "@/db/schema";
-import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
+import { getAllTransactionsRaw, getCategories } from "@/lib/sheets-db";
 import dayjs from "dayjs";
 
-async function getAmountSums(from: string, to: string): Promise<{ income: number; expense: number }> {
-  const [result] = await db
-    .select({
-      income: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'income' THEN ${transactions.amount} ELSE 0 END), 0)`,
-      expense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'expense' THEN ${transactions.amount} ELSE 0 END), 0)`,
-    })
-    .from(transactions)
-    .where(and(gte(transactions.date, from), lte(transactions.date, to)));
-  return { income: Number(result?.income || 0), expense: Number(result?.expense || 0) };
-}
-
 export async function GET(req: NextRequest) {
-  const sp = new URL(req.url).searchParams;
+  const sp   = new URL(req.url).searchParams;
   const type = sp.get("type") || "summary";
   const from = sp.get("from") || dayjs().startOf("month").format("YYYY-MM-DD");
-  const to = sp.get("to") || dayjs().endOf("month").format("YYYY-MM-DD");
+  const to   = sp.get("to")   || dayjs().endOf("month").format("YYYY-MM-DD");
+
+  const allTx = await getAllTransactionsRaw();
 
   if (type === "summary") {
-    const [sums, cnt] = await Promise.all([
-      getAmountSums(from, to),
-      db
-        .select({ count: sql<number>`COUNT(*)` })
-        .from(transactions)
-        .where(and(gte(transactions.date, from), lte(transactions.date, to))),
-    ]);
-
+    const inRange = allTx.filter((t) => t.date >= from && t.date <= to);
+    const income  = inRange.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+    const expense = inRange.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
     return NextResponse.json({
-      income: sums.income,
-      expense: sums.expense,
-      net: sums.income - sums.expense,
-      transactionCount: cnt[0]?.count || 0,
+      income,
+      expense,
+      net: income - expense,
+      transactionCount: inRange.length,
       period: { from, to },
     });
   }
 
   if (type === "byCategory") {
-    const data = await db
-      .select({
-        categoryId: categories.id,
-        categoryName: categories.name,
-        categoryIcon: categories.icon,
-        categoryColor: categories.color,
-        type: transactions.type,
-        total: sql<number>`SUM(${transactions.amount})`,
-        count: sql<number>`COUNT(*)`,
-      })
-      .from(transactions)
-      .innerJoin(categories, eq(transactions.categoryId, categories.id))
-      .where(and(gte(transactions.date, from), lte(transactions.date, to)))
-      .groupBy(categories.id, transactions.type)
-      .orderBy(desc(sql`SUM(${transactions.amount})`));
+    const inRange = allTx.filter((t) => t.date >= from && t.date <= to);
+    const cats    = await getCategories();
+    const catMap  = new Map(cats.map((c) => [c.id, c]));
 
-    return NextResponse.json(data);
+    const key = (t: (typeof inRange)[0]) => `${t.categoryId}:${t.type}`;
+    const agg = new Map<string, { total: number; count: number }>();
+    for (const t of inRange) {
+      const k = key(t);
+      const cur = agg.get(k) ?? { total: 0, count: 0 };
+      agg.set(k, { total: cur.total + t.amount, count: cur.count + 1 });
+    }
+
+    const result = [...agg.entries()].map(([k, v]) => {
+      const [catIdStr, txType] = k.split(":");
+      const cat = catMap.get(Number(catIdStr));
+      return {
+        categoryId:    Number(catIdStr),
+        categoryName:  cat?.name  ?? "Unknown",
+        categoryIcon:  cat?.icon  ?? "tag",
+        categoryColor: cat?.color ?? "#7c4dff",
+        type:          txType,
+        total:         v.total,
+        count:         v.count,
+      };
+    });
+    result.sort((a, b) => b.total - a.total);
+    return NextResponse.json(result);
   }
 
   if (type === "trend") {
     const toParam = sp.get("to");
-    const period = sp.get("period") || "monthly";
+    const period  = sp.get("period") || "monthly";
     const refDate = toParam ? dayjs(toParam) : dayjs();
+
+    function amountsForRange(f: string, t: string) {
+      const inRange = allTx.filter((tx) => tx.date >= f && tx.date <= t);
+      const income  = inRange.filter((tx) => tx.type === "income").reduce((s, tx) => s + tx.amount, 0);
+      const expense = inRange.filter((tx) => tx.type === "expense").reduce((s, tx) => s + tx.amount, 0);
+      return { income, expense, net: income - expense };
+    }
 
     if (period === "weekly") {
       const refWeekEnd = refDate.endOf("week");
-      const ranges = Array.from({ length: 3 }, (_, i) => {
-        const weekEnd = refWeekEnd.subtract(2 - i, "week");
+      const points = Array.from({ length: 3 }, (_, i) => {
+        const weekEnd   = refWeekEnd.subtract(2 - i, "week");
         const weekStart = weekEnd.startOf("week");
-        return { f: weekStart.format("YYYY-MM-DD"), t: weekEnd.format("YYYY-MM-DD"), label: weekStart.format("DD MMM") };
+        const f = weekStart.format("YYYY-MM-DD");
+        const t = weekEnd.format("YYYY-MM-DD");
+        return { month: weekStart.format("DD MMM"), ...amountsForRange(f, t) };
       });
-
-      const points = await Promise.all(
-        ranges.map(async ({ f, t, label }) => {
-          const sums = await getAmountSums(f, t);
-          return { month: label, ...sums, net: sums.income - sums.expense };
-        })
-      );
-      return NextResponse.json(points);
-    } else {
-      const ranges = Array.from({ length: 6 }, (_, i) => {
-        const d = refDate.subtract(5 - i, "month");
-        return { f: d.startOf("month").format("YYYY-MM-DD"), t: d.endOf("month").format("YYYY-MM-DD"), label: d.format("MMM YYYY") };
-      });
-
-      const points = await Promise.all(
-        ranges.map(async ({ f, t, label }) => {
-          const sums = await getAmountSums(f, t);
-          return { month: label, ...sums, net: sums.income - sums.expense };
-        })
-      );
       return NextResponse.json(points);
     }
+
+    const points = Array.from({ length: 6 }, (_, i) => {
+      const d = refDate.subtract(5 - i, "month");
+      const f = d.startOf("month").format("YYYY-MM-DD");
+      const t = d.endOf("month").format("YYYY-MM-DD");
+      return { month: d.format("MMM YYYY"), ...amountsForRange(f, t) };
+    });
+    return NextResponse.json(points);
   }
 
   return NextResponse.json({ error: "Unknown type" }, { status: 400 });

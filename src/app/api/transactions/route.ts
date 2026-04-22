@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { transactions, accounts, categories } from "@/db/schema";
-import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
-import { syncTransaction } from "@/lib/sync";
+import {
+  getTransactions,
+  createTransaction,
+  deleteTransaction,
+  updateAccountBalance,
+  getCategories,
+  getAccounts,
+} from "@/lib/sheets-db";
 import { checkBudgetForCategory, sendBudgetAlert } from "@/lib/budget-checker";
 import { z } from "zod";
 
@@ -11,34 +15,30 @@ const createSchema = z.object({
   categoryId: z.number(),
   type: z.enum(["income", "expense"]),
   amount: z.number().positive(),
-  note: z.string().optional(),
+  note: z.string().optional().default(""),
   date: z.string(),
 });
 
 export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
-  const limit = Number(sp.get("limit") || "50");
-  const offset = Number(sp.get("offset") || "0");
-  const from = sp.get("from");
-  const to = sp.get("to");
-  const type = sp.get("type");
-  const categoryId = sp.get("categoryId");
+  const limit      = Number(sp.get("limit") || "50");
+  const offset     = Number(sp.get("offset") || "0");
+  const from       = sp.get("from") ?? undefined;
+  const to         = sp.get("to") ?? undefined;
+  const type       = (sp.get("type") ?? undefined) as "income" | "expense" | undefined;
+  const categoryId = sp.get("categoryId") ? Number(sp.get("categoryId")) : undefined;
 
-  const conds = [];
-  if (from) conds.push(gte(transactions.date, from));
-  if (to) conds.push(lte(transactions.date, to));
-  if (type) conds.push(eq(transactions.type, type as "income" | "expense"));
-  if (categoryId) conds.push(eq(transactions.categoryId, Number(categoryId)));
+  const txList = await getTransactions({ limit, offset, from, to, type, categoryId });
 
-  const data = await db
-    .select({ transaction: transactions, category: categories, account: accounts })
-    .from(transactions)
-    .innerJoin(categories, eq(transactions.categoryId, categories.id))
-    .innerJoin(accounts, eq(transactions.accountId, accounts.id))
-    .where(conds.length ? and(...conds) : undefined)
-    .orderBy(desc(transactions.date), desc(transactions.id))
-    .limit(limit)
-    .offset(offset);
+  const [allCats, allAccs] = await Promise.all([getCategories(), getAccounts()]);
+  const catMap = new Map(allCats.map((c) => [c.id, c]));
+  const accMap = new Map(allAccs.map((a) => [a.id, a]));
+
+  const data = txList.map((tx) => ({
+    transaction: tx,
+    category: catMap.get(tx.categoryId) ?? { id: tx.categoryId, name: tx.categoryName, icon: "tag", type: tx.type, color: "#7c4dff" },
+    account: accMap.get(tx.accountId),
+  }));
 
   return NextResponse.json(data);
 }
@@ -46,15 +46,18 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const parsed = createSchema.parse(await req.json());
-    const [result] = await db.insert(transactions).values(parsed).returning();
+
+    // Ambil nama kategori untuk disimpan langsung di baris transaksi
+    const cats = await getCategories();
+    const cat = cats.find((c) => c.id === parsed.categoryId);
+
+    const tx = await createTransaction({
+      ...parsed,
+      categoryName: cat?.name ?? "",
+    });
 
     const delta = parsed.type === "income" ? parsed.amount : -parsed.amount;
-    await db
-      .update(accounts)
-      .set({ balance: sql`${accounts.balance} + ${delta}` })
-      .where(eq(accounts.id, parsed.accountId));
-
-    syncTransaction(result.id).catch(console.error);
+    await updateAccountBalance(parsed.accountId, delta);
 
     if (parsed.type === "expense") {
       checkBudgetForCategory(parsed.categoryId).then((s) => {
@@ -62,9 +65,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(tx, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: error.errors }, { status: 400 });
+    console.error(error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -73,15 +77,11 @@ export async function DELETE(req: NextRequest) {
   const id = Number(new URL(req.url).searchParams.get("id"));
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
-  const [tx] = await db.select().from(transactions).where(eq(transactions.id, id));
+  const tx = await deleteTransaction(id);
   if (!tx) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const delta = tx.type === "income" ? -tx.amount : tx.amount;
-  await db
-    .update(accounts)
-    .set({ balance: sql`${accounts.balance} + ${delta}` })
-    .where(eq(accounts.id, tx.accountId));
+  await updateAccountBalance(tx.accountId, delta);
 
-  await db.delete(transactions).where(eq(transactions.id, id));
   return NextResponse.json({ success: true });
 }

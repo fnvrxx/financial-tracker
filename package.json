@@ -6,19 +6,13 @@
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
-    "db:seed": "tsx src/db/seed.ts",
-    "db:studio": "drizzle-kit studio"
+    "sheets:init": "node -e \"fetch('http://localhost:3000/api/sync', {method:'POST'}).then(r=>r.json()).then(console.log)\""
   },
   "dependencies": {
     "clsx": "^2.1.0",
     "dayjs": "^1.11.20",
-    "drizzle-orm": "^0.45.1",
     "google-auth-library": "^10.6.2",
     "next": "^14.2.0",
-    "postgres": "^3.4.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "zod": "^3.23.0"
@@ -28,10 +22,8 @@
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.0",
-    "drizzle-kit": "^0.31.9",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
-    "tsx": "^4.16.0",
     "typescript": "^5.5.0"
   }
 }

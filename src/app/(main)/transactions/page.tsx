@@ -332,16 +332,16 @@ export default function TransactionsPage() {
                       <div
                         className="w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-bold shrink-0"
                         style={{
-                          background: `${category.color || "#7c4dff"}15`,
-                          color: category.color || "#7c4dff",
+                          background: `${category?.color || "#7c4dff"}15`,
+                          color: category?.color || "#7c4dff",
                         }}
                       >
-                        {category.name.charAt(0)}
+                        {category?.name?.charAt(0) ?? "?"}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-gray-900">{category.name}</p>
+                        <p className="text-sm font-bold text-gray-900">{category?.name ?? "—"}</p>
                         <p className="text-[11px] text-gray-400 truncate">
-                          {tx.note || account.name}
+                          {tx.note || account?.name}
                         </p>
                       </div>
                       <div className="text-right shrink-0">
@@ -351,14 +351,6 @@ export default function TransactionsPage() {
                           {tx.type === "income" ? "+" : "-"}
                           {formatRupiah(tx.amount)}
                         </p>
-                        <div className="flex items-center gap-1 justify-end mt-0.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            tx.synced ? "bg-emerald-400" : "bg-gray-300"
-                          }`} />
-                          <span className="text-[9px] text-gray-400">
-                            {tx.synced ? "synced" : "pending"}
-                          </span>
-                        </div>
                       </div>
                     </div>
                   ))}

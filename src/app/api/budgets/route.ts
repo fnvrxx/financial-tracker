@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { budgets } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { createBudget, updateBudget } from "@/lib/sheets-db";
 import { checkBudgets } from "@/lib/budget-checker";
 
 export async function GET(req: NextRequest) {
@@ -10,12 +8,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const [result] = await db.insert(budgets).values(await req.json()).returning();
+  const body = await req.json();
+  const result = await createBudget({
+    categoryId: body.categoryId,
+    limitAmount: body.limitAmount,
+    period: body.period ?? "monthly",
+  });
   return NextResponse.json(result, { status: 201 });
 }
 
 export async function PUT(req: NextRequest) {
   const { id, ...data } = await req.json();
-  await db.update(budgets).set(data).where(eq(budgets.id, id));
+  await updateBudget(id, data);
   return NextResponse.json({ success: true });
 }

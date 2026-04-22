@@ -222,7 +222,7 @@ export default function TransactionForm({ onSuccess }: Props) {
                   Akun
                 </label>
                 <select
-                  value={form.accountId}
+                  value={form.accountId || ""}
                   onChange={(e) => updateField("accountId", Number(e.target.value))}
                   className={cn(
                     "w-full bg-gray-50 border-2 rounded-2xl px-4 py-3 outline-none font-medium transition-colors",
@@ -231,9 +231,9 @@ export default function TransactionForm({ onSuccess }: Props) {
                       : "border-gray-100 focus:border-primary-400"
                   )}
                 >
-                  <option value={0}>Pilih akun...</option>
+                  <option value="">Pilih akun...</option>
                   {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
+                    <option key={a.id} value={String(a.id)}>{a.name}</option>
                   ))}
                 </select>
                 {errors.accountId && <p className="text-xs text-red-500 mt-1.5 ml-1">{errors.accountId}</p>}

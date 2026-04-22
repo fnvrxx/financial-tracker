@@ -1,6 +1,4 @@
-import { db } from "@/db";
-import { budgets, transactions, categories } from "@/db/schema";
-import { eq, and, sql, gte, lte } from "drizzle-orm";
+import { getBudgets, getCategories, getAllTransactionsRaw } from "@/lib/sheets-db";
 import dayjs from "dayjs";
 import type { BudgetStatus } from "@/types";
 
@@ -20,70 +18,39 @@ function getPeriodBounds(period: string, refDate: dayjs.Dayjs) {
 export async function checkBudgets(monthStart?: string): Promise<BudgetStatus[]> {
   const refDate = monthStart ? dayjs(monthStart) : dayjs();
 
-  const all = await db
-    .select({ budget: budgets, category: categories })
-    .from(budgets)
-    .innerJoin(categories, eq(budgets.categoryId, categories.id));
-
-  if (!all.length) return [];
-
-  // Single batched query: get spending for all budget categories at once
-  const monthlyBudgetIds = all.filter((r) => r.budget.period === "monthly").map((r) => r.budget.categoryId);
-  const weeklyBudgetIds = all.filter((r) => r.budget.period === "weekly").map((r) => r.budget.categoryId);
-
-  const monthBounds = getPeriodBounds("monthly", refDate);
-  const weekBounds = getPeriodBounds("weekly", refDate);
-
-  const [monthlySpending, weeklySpending] = await Promise.all([
-    monthlyBudgetIds.length > 0
-      ? db
-          .select({
-            categoryId: transactions.categoryId,
-            total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`,
-          })
-          .from(transactions)
-          .where(
-            and(
-              eq(transactions.type, "expense"),
-              gte(transactions.date, monthBounds.start),
-              lte(transactions.date, monthBounds.end)
-            )
-          )
-          .groupBy(transactions.categoryId)
-      : Promise.resolve([]),
-    weeklyBudgetIds.length > 0
-      ? db
-          .select({
-            categoryId: transactions.categoryId,
-            total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`,
-          })
-          .from(transactions)
-          .where(
-            and(
-              eq(transactions.type, "expense"),
-              gte(transactions.date, weekBounds.start),
-              lte(transactions.date, weekBounds.end)
-            )
-          )
-          .groupBy(transactions.categoryId)
-      : Promise.resolve([]),
+  const [allBudgets, allCats, allTx] = await Promise.all([
+    getBudgets(),
+    getCategories(),
+    getAllTransactionsRaw(),
   ]);
 
-  const monthlyMap = new Map(monthlySpending.map((r) => [r.categoryId, r.total]));
-  const weeklyMap = new Map(weeklySpending.map((r) => [r.categoryId, r.total]));
+  if (!allBudgets.length) return [];
 
-  return all.map(({ budget, category }) => {
-    const spendingMap = budget.period === "monthly" ? monthlyMap : weeklyMap;
-    const spent = Number(spendingMap.get(budget.categoryId) ?? 0);
+  const catMap = new Map(allCats.map((c) => [c.id, c]));
+
+  return allBudgets.map((budget) => {
+    const category = catMap.get(budget.categoryId);
+    const bounds = getPeriodBounds(budget.period, refDate);
+
+    const spent = allTx
+      .filter(
+        (t) =>
+          t.type === "expense" &&
+          t.categoryId === budget.categoryId &&
+          t.date >= bounds.start &&
+          t.date <= bounds.end
+      )
+      .reduce((sum, t) => sum + t.amount, 0);
+
     const remaining = budget.limitAmount - spent;
     const percentage = Math.round((spent / budget.limitAmount) * 100);
 
     return {
       budgetId: budget.id,
-      categoryId: category.id,
-      categoryName: category.name,
-      categoryIcon: category.icon || "tag",
-      categoryColor: category.color || "#7c4dff",
+      categoryId: budget.categoryId,
+      categoryName: category?.name ?? "Unknown",
+      categoryIcon: category?.icon ?? "tag",
+      categoryColor: category?.color ?? "#7c4dff",
       limitAmount: budget.limitAmount,
       spent,
       remaining,
@@ -97,7 +64,7 @@ export async function checkBudgets(monthStart?: string): Promise<BudgetStatus[]>
 
 export async function checkBudgetForCategory(categoryId: number): Promise<BudgetStatus | null> {
   const results = await checkBudgets();
-  return results.find((b) => b.categoryId === categoryId) || null;
+  return results.find((b) => b.categoryId === categoryId) ?? null;
 }
 
 export async function sendBudgetAlert(status: BudgetStatus) {
@@ -119,6 +86,6 @@ export async function sendBudgetAlert(status: BudgetStatus) {
       body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: "Markdown" }),
     });
   } catch {
-    // Telegram alert is best-effort
+    // best-effort
   }
 }
